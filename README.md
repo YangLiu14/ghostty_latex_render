@@ -83,7 +83,12 @@ formula is enlarged below. In the (auto-opened) pane:
 
 - **Click** a menu row, or press **1–9**, to jump to a formula.
 - **`j`/`k`**, the **arrow keys** to move between them.
+- **`y`** to copy the focused formula's LaTeX to the clipboard.
 - **`q`** to close the pane.
+
+The pane **matches your terminal theme** — it queries Ghostty's background/foreground
+(OSC 10/11) and renders the math and chrome to match, falling back to a dark default if the
+terminal doesn't answer.
 
 A single formula is just shown directly. An unparseable formula is skipped.
 (Non-interactive runs — `--once`, or piped output — render all formulas stacked instead.)

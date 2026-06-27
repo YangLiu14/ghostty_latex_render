@@ -12,6 +12,8 @@ import { displayPng, deleteAllImages, clearScreen } from "./kitty.mjs";
 import { readLatestAssistantText } from "./transcript.mjs";
 import { writeLock, removeLock, livePid } from "./lock.mjs";
 import { performAction } from "./launcher.mjs";
+import { detectTheme, buildTheme, hexToRgb } from "./theme.mjs";
+import { spawn } from "node:child_process";
 
 export function sessionIdFromPath(p) {
   return basename(p).replace(/\.jsonl$/, "");
@@ -19,12 +21,30 @@ export function sessionIdFromPath(p) {
 
 // Columns ≈ exWidth * BASE * scale (BASE folds in math-to-font ratio + cell aspect).
 const BASE = 1.5;
-const MENU_TOP = 3; // screen row (1-based) where the formula menu begins
+const MENU_TOP = 4; // screen row (1-based) where the formula menu begins
 
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
 const bold = (s) => `\x1b[1m${s}\x1b[0m`;
-const inv = (s) => `\x1b[7m${s}\x1b[0m`;
 const w = (s) => process.stdout.write(s);
+
+/** Wrap text in a 24-bit foreground color (optionally bold). */
+function paint(hex, s, boldOn = false) {
+  const [r, g, b] = hexToRgb(hex);
+  return `\x1b[${boldOn ? "1;" : ""}38;2;${r};${g};${b}m${s}\x1b[0m`;
+}
+
+/** Copy text to the macOS clipboard (best-effort). */
+function copyToClipboard(text) {
+  try {
+    const p = spawn("pbcopy");
+    p.on("error", () => {});
+    p.stdin.on("error", () => {});
+    p.stdin.end(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function scaleOf(opts) {
   if (opts.scale > 0) return opts.scale;
@@ -110,12 +130,13 @@ export function decodeInput(str) {
   if (str === "q" || str === "\x03") return { kind: "quit" };
   if (str === "j" || str === "n") return { kind: "move", delta: 1 };
   if (str === "k" || str === "p") return { kind: "move", delta: -1 };
+  if (str === "y") return { kind: "copy" };
   if (str >= "1" && str <= "9") return { kind: "jump", index: str.charCodeAt(0) - 49 };
   return null;
 }
 
-function makePager(opts) {
-  const state = { items: [], index: 0, label: "", cache: new Map() };
+function makePager(opts, theme) {
+  const state = { items: [], index: 0, label: "", cache: new Map(), flash: null, flashTimer: null };
 
   async function renderSel() {
     const it = state.items[state.index];
@@ -123,7 +144,11 @@ function makePager(opts) {
     if (state.cache.has(state.index)) return state.cache.get(state.index);
     let r = null;
     try {
-      r = await renderToPng(it.tex, { display: it.type === "block" });
+      r = await renderToPng(it.tex, {
+        display: it.type === "block",
+        color: theme.fg,
+        background: theme.bg,
+      });
     } catch (e) {
       r = { error: e.message };
     }
@@ -135,27 +160,56 @@ function makePager(opts) {
     clearScreen();
     deleteAllImages();
     const n = state.items.length;
-    const pos = n ? `[${state.index + 1}/${n}]` : "";
-    w(bold("  Claude Code · LaTeX preview ") + dim(pos) + dim(`  ${state.label}\n`));
+    const W = process.stdout.columns || 80;
+
+    // Header + hairline rule.
+    const counter = n ? `[${state.index + 1}/${n}]` : "";
+    w(
+      "  " +
+        paint(theme.accent, "✦ ", true) +
+        paint(theme.fg, "LaTeX preview", true) +
+        (counter ? "  " + paint(theme.accent, counter) : "") +
+        (state.label ? "   " + paint(theme.dim, state.label) : "") +
+        "\n",
+    );
+    w(paint(theme.faint, "─".repeat(W)) + "\n");
+
     if (n === 0) {
-      w("\n" + dim("  (no LaTeX in the latest answer)\n"));
+      w("\n  " + paint(theme.dim, "waiting for a formula…") + "\n");
       return;
     }
     w("\n");
+
+    // Formula menu (only when there's a choice to make).
     if (n > 1) {
-      const max = Math.max(10, (process.stdout.columns || 80) - 10);
+      const max = Math.max(10, W - 12);
       state.items.forEach((it, i) => {
-        const tag = it.type === "block" ? "▦" : "·";
-        const line = ` ${String(i + 1).padStart(2)} ${tag} ${snippet(it.tex, max)} `;
-        w("  " + (i === state.index ? inv(line) : dim(line)) + "\n");
+        const num = String(i + 1).padStart(2);
+        const text = snippet(it.tex, max);
+        if (i === state.index) {
+          w("  " + paint(theme.accent, "❯ " + num + "  ", true) + paint(theme.fg, text) + "\n");
+        } else {
+          w("    " + paint(theme.dim, num + "  " + text) + "\n");
+        }
       });
       w("\n");
     }
+
+    // Selected formula, centered horizontally.
     const r = await renderSel();
-    if (r && r.png) displayPng(r.png, { cols: colsFor(r.exW, opts) });
-    else if (r && r.error) w(`  render error: ${r.error}\n`);
+    if (r && r.png) {
+      const cols = colsFor(r.exW, opts);
+      const col = Math.max(1, Math.floor((W - cols) / 2) + 1);
+      w(`\x1b[${col}G`);
+      displayPng(r.png, { cols });
+    } else if (r && r.error) {
+      w("  " + paint(theme.dim, "render error: " + r.error));
+    }
     w("\n");
-    if (n > 1) w(dim("  click / j k / ← → / 1-9 to select · q to close\n"));
+
+    // Footer: a transient toast, otherwise the key hints.
+    const hints = (n > 1 ? "j k · ← → · 1-9 · " : "") + "y copy · q quit";
+    w("\n  " + paint(state.flash ? theme.accent : theme.dim, state.flash || hints) + "\n");
   }
 
   function setItems(items, label) {
@@ -177,7 +231,20 @@ function makePager(opts) {
     return select(nextIndex(state.index, delta, state.items.length));
   }
 
-  return { state, draw, setItems, move, select };
+  function copy() {
+    const it = state.items[state.index];
+    if (!it) return;
+    copyToClipboard(it.tex);
+    state.flash = "✓ copied LaTeX to clipboard";
+    clearTimeout(state.flashTimer);
+    state.flashTimer = setTimeout(() => {
+      state.flash = null;
+      draw();
+    }, 1300);
+    return draw();
+  }
+
+  return { state, draw, setItems, move, select, copy };
 }
 
 function handleInput(buf, pager) {
@@ -190,6 +257,8 @@ function handleInput(buf, pager) {
       return pager.move(intent.delta);
     case "jump":
       return pager.select(intent.index);
+    case "copy":
+      return pager.copy();
     case "clickRow":
       return pager.select(rowToIndex(intent.y, pager.state.items.length));
   }
@@ -259,9 +328,11 @@ export async function watchSession(sessionFile, opts = {}) {
   writeLock(sessionId);
 
   const interactive = process.stdin.isTTY && process.stdout.isTTY;
+  let theme = buildTheme();
   if (interactive) {
     process.stdin.setRawMode(true);
     process.stdin.resume();
+    theme = await detectTheme(); // OSC query before mouse mode, so replies aren't mixed in
     w("\x1b[?1000h\x1b[?1006h"); // enable mouse reporting (SGR)
   }
 
@@ -282,7 +353,7 @@ export async function watchSession(sessionFile, opts = {}) {
   process.on("exit", cleanup);
   for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, quit);
 
-  const pager = interactive ? makePager(opts) : null;
+  const pager = interactive ? makePager(opts, theme) : null;
   let lastId = null;
 
   async function refresh() {
@@ -297,10 +368,13 @@ export async function watchSession(sessionFile, opts = {}) {
 
   await refresh();
   if (!lastId) {
-    clearScreen();
-    deleteAllImages();
-    w(bold("  Claude Code · LaTeX preview\n"));
-    w(dim("  waiting for the next answer…\n"));
+    if (pager) await pager.setItems([], "");
+    else {
+      clearScreen();
+      deleteAllImages();
+      w(bold("  Claude Code · LaTeX preview\n"));
+      w(dim("  waiting for the next answer…\n"));
+    }
   }
 
   if (pager) process.stdin.on("data", (b) => handleInput(b, pager));
