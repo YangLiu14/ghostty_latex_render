@@ -26,6 +26,7 @@ function parseFlags(argv) {
     if (t === "--project") f.project = true;
     else if (t === "--once") f.once = true;
     else if (t === "--all") f.all = true;
+    else if (t === "--fit") f.fit = true;
     else if (t === "--native") f.native = true;
     else if (t === "--direction") f.direction = argv[++i];
     else if (t === "--session") f.session = argv[++i];
@@ -45,9 +46,10 @@ Usage:
         Remove the hook.
   cc-latex status
         Show whether the hook is installed and which previews are live.
-  cc-latex preview [--session PATH] [--once] [--all] [--scale N] [--native]
+  cc-latex preview [--session PATH] [--once] [--all] [--scale N] [--fit] [--native]
         Run the preview watcher (normally launched automatically).
         --all shows every formula (default: only complex ones).
+        --fit shrinks the split to ~1/3 of the window on launch.
   cc-latex demo '<tex>'
         Render one formula to verify Ghostty image support.
 `;

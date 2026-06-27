@@ -28,6 +28,28 @@ export function openSplit(command, workdir, direction = "right") {
   }
 }
 
+/**
+ * Perform a Ghostty action string (e.g. "resize_split:right,120") on the
+ * currently focused terminal surface. Best-effort.
+ * @returns {{ok:boolean, error?:string}}
+ */
+export function performAction(action) {
+  try {
+    execFileSync(
+      "osascript",
+      [
+        "-e",
+        `tell application "Ghostty" to perform action "${action}" on (focused terminal of selected tab of front window)`,
+      ],
+      { stdio: ["ignore", "ignore", "pipe"], timeout: 4000 },
+    );
+    return { ok: true };
+  } catch (e) {
+    const msg = (e.stderr && e.stderr.toString().trim()) || e.message;
+    return { ok: false, error: msg };
+  }
+}
+
 const sh = (s) => `"${String(s).replace(/(["$`\\])/g, "\\$1")}"`;
 
 /**
@@ -50,7 +72,7 @@ export function openPreviewSplit({
   const body =
     "#!/bin/sh\n" +
     `exec ${sh(nodeBin)} ${sh(cliPath)} preview --session ${sh(transcript)} ` +
-    `--scale ${Number(scale) || 1} 2>${sh(errLog)}\n`;
+    `--scale ${Number(scale) || 1} --fit 2>${sh(errLog)}\n`;
   writeFileSync(wrapper, body);
   chmodSync(wrapper, 0o755);
   const res = openSplit(wrapper, cwd, direction);

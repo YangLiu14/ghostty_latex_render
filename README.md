@@ -95,6 +95,11 @@ pane width, and re-paints when you resize the pane. Tune the overall size with `
 (default `1.0`): bigger e.g. `cc-latex setup --scale 1.4`, smaller `--scale 0.7`. You can
 also set `CC_LATEX_SCALE` in the environment.
 
+The auto-opened pane shrinks itself to **~1/3 of the window** on launch (`--fit`), leaving
+the Claude Code pane the larger two-thirds. It does this by resizing the split until its
+column count hits the target — self-calibrating, so it doesn't depend on display DPI. (Run
+`cc-latex preview` manually without `--fit` to keep the default 50/50 split.)
+
 ### Which formulas are shown
 
 To cut noise, only **complex** formulas render — those with 2-D / typographic structure that

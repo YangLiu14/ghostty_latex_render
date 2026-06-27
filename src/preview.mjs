@@ -11,6 +11,7 @@ import { renderStack, renderToPng } from "./render.mjs";
 import { displayPng, deleteAllImages, clearScreen } from "./kitty.mjs";
 import { readLatestAssistantText } from "./transcript.mjs";
 import { writeLock, removeLock, livePid } from "./lock.mjs";
+import { performAction } from "./launcher.mjs";
 
 export function sessionIdFromPath(p) {
   return basename(p).replace(/\.jsonl$/, "");
@@ -196,6 +197,55 @@ function handleInput(buf, pager) {
 
 let quit = () => process.exit(0);
 
+// ---- fit the split to ~1/3 of the window ------------------------------------
+
+// A fresh right-split starts at ~50% width, so 1/3 of the window is 2/3 of this
+// pane. Target columns are computed from that ratio.
+export function fitTargetCols(startCols, fraction = 1 / 3, paneFraction = 0.5) {
+  return Math.round(startCols * (fraction / paneFraction));
+}
+
+function onceResize(ms) {
+  return new Promise((resolve) => {
+    let done = false;
+    const fin = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(t);
+      process.stdout.removeListener("resize", fin);
+      resolve();
+    };
+    const t = setTimeout(fin, ms);
+    process.stdout.on("resize", fin);
+  });
+}
+
+// Shrink the split until our column count reaches the target. Self-calibrating:
+// one probe move learns pixels-per-column and the shrink direction (Ghostty's
+// resize_split amount is in pixels), a second move covers the rest. Best-effort:
+// if it can't resize (single pane, not focused) it leaves the pane as-is.
+async function fitToThird() {
+  const start = process.stdout.columns || 0;
+  const target = fitTargetCols(start);
+  if (!start || target < 4 || target >= start) return;
+
+  const PROBE = 60;
+  let dir = "right";
+  performAction(`resize_split:${dir},${PROBE}`);
+  await onceResize(400);
+  const now = process.stdout.columns || start;
+  if (now > start) dir = "left"; // "right" grew the pane → shrink with "left"
+  const moved = Math.abs(now - start);
+  if (moved === 0) return; // resize had no effect
+
+  const pxPerCol = PROBE / moved;
+  const remaining = (process.stdout.columns || start) - target;
+  if (remaining > 0) {
+    performAction(`resize_split:${dir},${Math.max(1, Math.round(remaining * pxPerCol))}`);
+    await onceResize(400);
+  }
+}
+
 // ---- watcher -----------------------------------------------------------------
 
 export async function watchSession(sessionFile, opts = {}) {
@@ -214,6 +264,8 @@ export async function watchSession(sessionFile, opts = {}) {
     process.stdin.resume();
     w("\x1b[?1000h\x1b[?1006h"); // enable mouse reporting (SGR)
   }
+
+  if (interactive && opts.fit) await fitToThird();
   const cleanup = () => {
     if (interactive) {
       w("\x1b[?1000l\x1b[?1006l");
