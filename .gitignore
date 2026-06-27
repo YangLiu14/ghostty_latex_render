@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# logs / debug
+*.log
+npm-debug.log*
+
+# environment
+.env
+.env.local
+
+# macOS
+.DS_Store
+
+# editors
+.idea/
+*.swp
+
+# build / coverage
+dist/
+coverage/

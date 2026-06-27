@@ -1,0 +1,24 @@
+{
+  "name": "ghostty-latex-render",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Render LaTeX from Claude Code answers as paper-grade images in a Ghostty split pane (Kitty graphics protocol)",
+  "bin": {
+    "cc-latex": "src/cli.mjs"
+  },
+  "files": [
+    "src/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "preview": "node src/cli.mjs preview",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "mathjax-full": "^3.2.2",
+    "sharp": "^0.33.5"
+  }
+}
