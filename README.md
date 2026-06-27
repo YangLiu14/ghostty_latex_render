@@ -1,5 +1,7 @@
 # ghostty-latex-render
 
+[![npm](https://img.shields.io/npm/v/ghostty-latex-render)](https://www.npmjs.com/package/ghostty-latex-render)
+
 Auto-render the LaTeX in Claude Code answers as **paper-grade math images**, live, in a
 **Ghostty split pane** — no terminal fork, no leaving the terminal.
 
@@ -42,10 +44,23 @@ Only two npm deps: `mathjax-full` and `sharp`.
 
 ## Install
 
+Install from npm, then register the hook once:
+
 ```bash
-npm install -g ghostty-latex-render   # or: npm install && npm link
-cc-latex setup                        # registers the Claude Code Stop hook (global)
+npm install -g ghostty-latex-render
+cc-latex setup
 ```
+
+<details>
+<summary>Install from source instead</summary>
+
+```bash
+git clone https://github.com/YangLiu14/ghostty-latex-render.git
+cd ghostty-latex-render
+npm install && npm link
+cc-latex setup
+```
+</details>
 
 `setup` writes the hook into `~/.claude/settings.json` (use `--project` for a single
 project's `.claude/settings.json`). **Restart any running Claude Code session** so it picks

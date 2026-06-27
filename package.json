@@ -21,6 +21,9 @@
     "terminal",
     "mathjax"
   ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
   "bin": {
     "cc-latex": "src/cli.mjs"
   },
