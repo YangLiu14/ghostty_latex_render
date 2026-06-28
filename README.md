@@ -2,6 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/ghostty-latex-render)](https://www.npmjs.com/package/ghostty-latex-render)
 
+**English** · [简体中文](README.zh-CN.md)
+
 Auto-render the LaTeX in Claude Code answers as **paper-grade math images**, live, in a
 **Ghostty split pane** — no terminal fork, no leaving the terminal.
 
@@ -9,23 +11,16 @@ Install it, run `cc-latex setup` once, and from then on: whenever a Claude Code 
 Ghostty contains a formula, a side pane opens by itself and shows the typeset math. Later
 answers update the same pane.
 
+![ghostty-latex-render in action — Claude Code on the left, the rendered formula in an auto-opened pane on the right](assets/screenshot.jpg)
+
 See [`docs/ghostty-latex-render-design.md`](docs/ghostty-latex-render-design.md) for the
 full design rationale.
 
 ## How it works
 
-```
-Claude Code (left pane)                         math preview (right pane, auto-opened)
-   you chat normally                               ┌────────────────────┐
-   answer contains $$V(s)=…$$                       │   V(s) = 𝔼[ … ]    │  ← MathJax-rendered PNG
-        │                                           └────────────────────┘
-        ▼  Stop hook fires
-   cc-latex hook  ──reads transcript, finds LaTeX──►  AppleScript: split Ghostty,
-                                                       run `cc-latex preview` in the new pane
-                                                              │
-                                            watches the transcript, renders each answer's
-                                            formulas with the Kitty graphics protocol
-```
+<p align="center">
+  <img src="assets/how-it-works.png" alt="Flow: a Claude Code answer with a formula fires a Stop hook; cc-latex extracts the LaTeX, splits Ghostty via AppleScript, and a watcher renders MathJax → SVG → PNG, painted into the right pane with the Kitty graphics protocol" width="820">
+</p>
 
 - **Detection** happens in the application layer: a Claude Code **`Stop` hook** reads the
   finished answer's transcript and extracts `$…$` / `$$…$$` / `\(…\)` / `\[…\]`.
@@ -131,28 +126,6 @@ real equations). Trivial inline math text already reads fine, so it's skipped: a
 If an answer has only trivial math, no pane opens. To render **everything**, pass `--all`
 (`cc-latex preview --all`) or set `CC_LATEX_ALL=1` in the environment before starting Claude
 Code (the auto-opened pane inherits it).
-
-## Design notes
-
-- **Per session**, only one preview pane runs (a lock file in `$TMPDIR/cc-latex/`). If you
-  close the pane, the next formula reopens it.
-- **Method B (transcript tail)** drives rendering: the hook passes the exact
-  `transcript_path`, and the preview watches that JSONL for new assistant messages — so it
-  needs no extra Claude Code config beyond the one hook.
-- Math shows in the **side pane**, not inline in the left answer — the deliberate trade-off
-  for "paper-grade + no fork" (see the design doc). For the same reason you select formulas
-  in the **right pane** (which we own), not by clicking the left TUI: a terminal can't hand
-  one pane's clicks to another, and the left answer carries no formula coordinates.
-
-## Tests
-
-```bash
-npm test
-```
-
-Covers the formula extractor (code-block exclusion, `\$` escaping, pandoc-style `$` guards,
-`\[`/`\(` delimiters, multiline block math), the complexity filter (trivial vs complex),
-and the pager navigation (index wrap, click-row mapping, key/mouse decoding).
 
 ## Uninstall
 
